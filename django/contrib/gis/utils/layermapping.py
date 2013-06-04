@@ -293,7 +293,8 @@ class LayerMapping(object):
             elif isinstance(model_field, models.base.ModelBase):
                 # The related _model_, not a field was passed in -- indicating
                 # another mapping for the related Model.
-                val = self.verify_fk(feat, model_field, ogr_name)
+                fk_field = self.model._meta.get_field(field_name)
+                val = self.verify_fk(feat, model_field, fk_field, ogr_name)
             else:
                 # Otherwise, verify OGR Field type.
                 val = self.verify_ogr_field(feat[ogr_name], model_field)
@@ -390,9 +391,15 @@ class LayerMapping(object):
         try:
             return rel_model.objects.using(self.using).get(**fk_kwargs)
         except ObjectDoesNotExist:
-            raise MissingForeignKey('No ForeignKey %s model found with keyword arguments: %s' % (rel_model.__name__, fk_kwargs))
+           # When the foreign key value did not exist and
+           # the foreign key field's configuration allows null foreign key values,
+           # then set the foreign key value to None
+           if fk_field.null:
+               return None
+           else:
+               raise MissingForeignKey('No ForeignKey %s model found with keyword arguments: %s' % (rel_model.__name__, fk_kwargs))
 
-    def verify_geom(self, geom, model_field):
+    def verify_geom(self, geom, fk_field, model_field):
         """
         Verifies the geometry -- will construct and return a GeometryCollection
         if necessary (for example if the model field is MultiPolygonField while
